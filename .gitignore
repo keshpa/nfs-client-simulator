@@ -1,8 +1,13 @@
 tags
 cscope.out
 
+#ninja files
+bin/.ninja_deps
+bin/.ninja_logs
+
 # Prerequisites
 *.d
+bin/nfsclisim
 
 # Compiled Object files
 *.slo

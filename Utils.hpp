@@ -34,3 +34,23 @@ int parseArgs(int argc, char** argv, ServerContexts& sContexts);
 int64_t getRandomNumber(uint32_t seed);
 
 uint64_t getMonotonic(int64_t seed);
+
+class ScopedMemoryHandler {
+	public:
+		ScopedMemoryHandler(uchar_t *memptr) : rawPtr(memptr), memoryFreed(false) {}
+		void freeMemory() {
+			std::lock_guard<std::mutex> lock(mutex);
+			if (not memoryFreed && rawPtr) {
+				memoryFreed = true;
+				delete [] rawPtr;
+				rawPtr = nullptr;
+			}
+		}
+		~ScopedMemoryHandler() {
+			freeMemory();
+		}
+	private:
+		bool memoryFreed;
+		mutable std::mutex mutex;
+		uchar_t* rawPtr;
+};

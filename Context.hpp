@@ -16,7 +16,7 @@
 #include <time.h>
 #include <mutex>
 
-class Context {
+class Context : public std::enable_shared_from_this<Context> {
 	public:
 		DESC_CLASS_ENUM(NFSOPERATION, size_t,
 			None = 0,
@@ -32,6 +32,8 @@ class Context {
 		Context(std::string& server, int32_t port) : server(server), port(port), error(0), returnValue(0), returnString(nullptr), operationType(NFSOPERATION::None), socketFd(-1) {}
 
 		int32_t connect();
+		int32_t send(uchar_t* wireBytes, int32_t size);
+		int32_t receive(uchar_t* wireBytes, int32_t& size);
 		void printStatus();
 		void setOperation(NFSOPERATION operation);
 		NFSOPERATION getOperation();
@@ -46,22 +48,77 @@ class Context {
 			PMAPPROC_CALLIT = 5
 		);
 
+		DESC_CLASS_ENUM(RPCTYPE, uint32_t,
+			None = -1,
+			CALL = 0,
+			REPLY = 1,
+			UNKNOWN
+		);
+
+		DESC_CLASS_ENUM(RPC_VERSION, uint32_t,
+			None = -1,
+			RPC_VERSION1 = 1,
+			RPC_VERSION2 = 2,
+			UNKNOWN = 255
+		);
+
+		DESC_CLASS_ENUM(RPC_PROGRAM, uint32_t,
+			PORTMAP = 100000,
+			NFS = 100003,
+			MOUNT = 100005,
+			NLM = 100021,
+		);
+
+		DESC_CLASS_ENUM(AUTH_TYPE, uint32_t,
+			AUTH_INVALID = -1,
+			AUTH_NONE = 0,
+			AUTH_SYS = 1,
+			AUTH_SHORT = 2, //Not implemented
+			AUTH_DH = 3, //Not implemented
+			RPCSEC_GSS = 6, //Not implemented
+			UNKNOWN
+		);
+
+
 		class PortMapperContext {
 			public:
-				PortMapperContext() : port(0), error(0) {};
+				PortMapperContext()
+		  	  : port(0), error(0), rpcVersion(RPC_VERSION::None), authType(AUTH_TYPE::AUTH_INVALID) {};
+
 				int32_t getPort() const {
 					return port;
 				}
+				void setVersion(RPC_VERSION version) {
+					rpcVersion = version;
+				}
+				RPC_VERSION getVersion() const {
+					return rpcVersion;
+				}
+				void setAuthType(AUTH_TYPE auth) {
+					authType = auth;
+				}
+				AUTH_TYPE getAuthType() const {
+					return authType;
+				}
 				friend class Context;
 			private:
+				void setContext(const std::shared_ptr<Context>& myContext) {
+					context = myContext;
+				}
 				void setPort(int32_t value, int32_t err) {
 					port = value;
 					error = err;
 				}
+				std::shared_ptr<Context> context;
 				int32_t	port;
 				int32_t error;
+				RPC_VERSION rpcVersion;
+				AUTH_TYPE authType;
 		};
-		void makePortMapperRequest();
+		void makePortMapperRequest(int32_t rcvTimeo);
+		PortMapperContext& getPortMapperContext() {
+			return portMapperDetails;
+		}
 
 	private:
 		std::string server;
@@ -105,11 +162,10 @@ class ServerContexts {
 
 		void addContext(Context_p& context) {
 			struct ServerHold server = {.context = context, .usageCount = 0};
-			DEBUG_LOG(INFO) << "Created one context.";
 			sContexts.push_back(server);
 		}
 
-		void deleteContext(Context_p& context);
+		void deleteContext(Context_p context);
 		void deleteContext(int32_t index);
 
 		Context_p getContext(int32_t index) {

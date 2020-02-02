@@ -28,6 +28,8 @@
 #include "Context.hpp"
 #include "rpc.hpp"
 
+#define RECV_TIMEOUT		5
+
 int main (int argc, char** argv)
 {
 	ServerContexts sContexts;
@@ -40,7 +42,7 @@ int main (int argc, char** argv)
 
 	context1->connect();
 	context1->setOperation(Context::NFSOPERATION::GetPort);
-	context1->makePortMapperRequest();
+	context1->makePortMapperRequest(RECV_TIMEOUT);
 
 	sContexts.putContext(0);
 
