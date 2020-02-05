@@ -29,11 +29,12 @@ class Context : public std::enable_shared_from_this<Context> {
 			UNSHARE,
 			UNKNOWN
 		);
-		Context(std::string& server, int32_t port) : server(server), port(port), error(0), returnValue(0), returnString(nullptr), operationType(NFSOPERATION::None), socketFd(-1) {}
+		Context(std::string& server, int32_t port) : server(server), port(port), error(0), returnValue(0), returnString(nullptr), operationType(NFSOPERATION::None), socketFd(-1), totalSent(0UL), totalReceived(0UL) {}
 
 		int32_t connect();
+		void disconnect();
 		int32_t send(uchar_t* wireBytes, int32_t size, bool trace = false);
-		int32_t receive(uchar_t* wireBytes, int32_t& size, bool trace = false);
+		int32_t receive(uint32_t timeout, uchar_t* wireBytes, int32_t& size, bool trace = false);
 		void printStatus();
 		void setOperation(NFSOPERATION operation);
 		NFSOPERATION getOperation();
@@ -76,6 +77,7 @@ class Context : public std::enable_shared_from_this<Context> {
 		);
 
 		DESC_CLASS_ENUM(AUTH_TYPE, uint32_t,
+			None = -1,
 			AUTH_INVALID = -1,
 			AUTH_NONE = 0,
 			AUTH_SYS = 1,
@@ -95,11 +97,14 @@ class Context : public std::enable_shared_from_this<Context> {
 			IPPROTO_UDP = 17,
 		);
 
+		void setPort(uint32_t newPort) {
+			port = newPort;
+		}
 
 		class PortMapperContext {
 			public:
 				PortMapperContext()
-		  	  : port(0), error(0), rpcVersion(RPC_VERSION::None), programVersion(PROGRAM_VERSION::None), authType(AUTH_TYPE::AUTH_INVALID) {};
+		  	  : port(0), mountPort(0), error(0), rpcVersion(RPC_VERSION::None), programVersion(PROGRAM_VERSION::None), authType(AUTH_TYPE::AUTH_INVALID) {};
 
 				int32_t getPort() const {
 					return port;
@@ -121,8 +126,16 @@ class Context : public std::enable_shared_from_this<Context> {
 				AUTH_TYPE getAuthType() const {
 					return authType;
 				}
+
+				uint32_t getMountPort() const {
+					return mountPort;
+				}
+
 				friend class Context;
 			private:
+				void setMountPort(uint32_t port) {
+					mountPort = port;
+				}
 				void setProgramVersion(PROGRAM_VERSION version) {
 					programVersion = version;
 				}
@@ -135,17 +148,104 @@ class Context : public std::enable_shared_from_this<Context> {
 				}
 				std::shared_ptr<Context> context;
 				int32_t	port;
+				int32_t	mountPort;
 				int32_t error;
 				RPC_VERSION rpcVersion;
 				PROGRAM_VERSION programVersion;
 				AUTH_TYPE authType;
 		};
-		void makePortMapperRequest(int32_t rcvTimeo);
+
+		uint32_t makeMountPortMapperRequest(int32_t rcvTimeo);
 		PortMapperContext& getPortMapperContext() {
 			return portMapperDetails;
 		}
 
+		DESC_CLASS_ENUM(MOUNTPROG, uint32_t,
+			MOUNTPROC3_NULL = 0,
+			MOUNTPROC3_MNT = 1,
+			MOUNTPROC3_DUMP = 2,
+			MOUNTPROC3_UMNT = 3,
+			MOUNTPROC3_UMNTALL = 4,
+			MOUNTPROC3_EXPORT = 5,
+		);
+
+		DESC_CLASS_ENUM(MOUNTREPLY, uint32_t,
+			MNT3_OK = 0,                    /* no error */
+			MNT3ERR_PERM = 1,               /* Not owner */
+			MNT3ERR_NOENT = 2,              /* No such file or directory */
+			MNT3ERR_IO = 5,                 /* I/O error */
+			MNT3ERR_ACCES = 13,             /* Permission denied */
+			MNT3ERR_NOTDIR = 20,            /* Not a directory */
+			MNT3ERR_INVAL = 22,             /* Invalid argument */
+			MNT3ERR_NAMETOOLONG = 63,       /* Filename too long */
+			MNT3ERR_NOTSUPP = 10004,        /* Operation not supported */
+			MNT3ERR_SERVERFAULT = 10006,    /* A failure on the server */
+		);
+
+
+		class MountContext {
+			public:
+				MountContext() : mountPort(-1), error(0), mountVersion(-1), authType(AUTH_TYPE::None) {}
+				void setMountPort(uint32_t port) {
+					mountPort = port;
+				}
+
+				uint32_t getMountPort() const {
+					return mountPort;
+				}
+
+				void setMountPath(const std::string& remote) {
+					mountExport = remote;
+				}
+
+				void getMountPath(std::string& remote) const {
+					remote = mountExport;
+				}
+
+				void setMountProtVersion(uint32_t version) {
+					mountVersion = version;
+				}
+
+				uint32_t getMountProtVersion() const {
+					return mountVersion;
+				}
+
+				std::vector<uchar_t>& getMountHandle() {
+					return mountHandle;
+				}
+
+				friend class Context;
+			private:
+				void setContext(const std::shared_ptr<Context>& myContext) {
+					context = myContext;
+				}
+
+				void setMountHandle(const std::vector<uchar_t> handle) {
+					mountHandle = handle;
+				}
+				uint32_t mountPort;
+				std::shared_ptr<Context> context;
+				int32_t error;
+				std::vector<uchar_t> mountHandle;
+				uint32_t mountVersion;
+				std::string mountExport;
+				AUTH_TYPE authType;
+		};
+
+		const std::vector<uchar_t>& makeMountCall(uint32_t timeout, const std::string& remote, uint32_t mountVersion);
+		MountContext& getMountContext() {
+			return mountContext;
+		}
+
+		const std::vector<uchar_t>& getMountHandle(uint32_t i) {
+			return mountHandles.at(i);
+		}
+
 	private:
+		void addMountHandle(const std::vector<uchar_t> handle) {
+			mountHandles.push_back(handle);
+		}
+
 		std::string server;
 		int32_t	port;
 		int32_t error;
@@ -153,11 +253,16 @@ class Context : public std::enable_shared_from_this<Context> {
 		int32_t returnValue;
 		char *returnString;
 		int32_t socketFd;
+		uint64_t totalSent;
+		uint64_t totalReceived;
 		time_t connectTime;
+		time_t disconnectTime;
 		struct tm *timem;
 		NFSOPERATION operationType;
 		std::mutex mutex;
 		PortMapperContext portMapperDetails;
+		MountContext mountContext;
+		std::vector<std::vector<uchar_t>> mountHandles;
 };
 
 using Context_p = std::shared_ptr<Context>;

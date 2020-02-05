@@ -7,7 +7,9 @@ class RPC {
 	public:
 		RPC() = default;
 
-		static uint32_t makeRPC(uint32_t xid, Context::RPCTYPE rpcType, Context::RPC_VERSION rpcVersion, Context::RPC_PROGRAM rpcProgram, Context::PROGRAM_VERSION programVersion, Context::PORTMAPPER request, uchar_t* wireBytes) {
+		constexpr static uint32_t HOSTNAME_LEN = 256;
+
+		static uint32_t makeRPC(uint32_t xid, Context::RPCTYPE rpcType, Context::RPC_VERSION rpcVersion, Context::RPC_PROGRAM rpcProgram, Context::PROGRAM_VERSION programVersion, uchar_t* wireBytes) {
 			uint32_t size = 0;
 
 			xdr_encode_u32(&wireBytes[size], 0); // Total message size. Set it to zero for now.
@@ -35,12 +37,12 @@ class RPC {
 			auto credPayloadBegin = authSize;
     
 			uint32_t auth_stamp = static_cast<uint32_t>(getMonotonic(0L));
-			auth_stamp = 12345;
-
 			authSize += xdr_encode_u32(&wireBytes[authSize], auth_stamp);
 
-			std::string authMachine = std::string("machinename");
+			std::string authMachine = getSelfFQDN();
+
 			authSize += xdr_encode_string(&wireBytes[authSize], authMachine);
+			authSize += xdr_encode_align(&wireBytes[authSize], authSize, sizeof(uint32_t));
 
 			authSize += xdr_encode_u32(&wireBytes[authSize], 0); // Encode UID number 0
 
@@ -103,6 +105,7 @@ class RPC {
 				successType = static_cast<RPC_SUCCESS>(xdr_decode_u32(wireResponse, parsedOffset));
 				if (successType == RPC_SUCCESS::SUCCESS) {
 						uchar_t* returnValue = &wireResponse[parsedOffset];
+						DEBUG_LOG(CRITICAL) << "Payload at offset : " << parsedOffset;
 						return returnValue;
 				} else {
 					if (successType == RPC_SUCCESS::PROG_MISMATCH) {

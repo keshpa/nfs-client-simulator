@@ -7,12 +7,14 @@
 uint32_t xdr_encode_u32(uchar_t* dst, uint32_t value);
 uint32_t xdr_encode_u64(uchar_t* dst, uint64_t value);
 int32_t xdr_encode_string(uchar_t* dst, const std::string& str);
+uint32_t xdr_encode_align(uchar_t* dst, uint32_t currentSize, uint32_t alignSize);
 
 void xdr_encode_lastFragment(uchar_t * dst);
 
 uint32_t xdr_decode_u32(uchar_t *src, uint32_t& offset, bool trace = false);
 uint64_t xdr_decode_u64(uchar_t *src, uint32_t& offset, bool trace = false);
 int32_t xdr_decode_string(uchar_t* dst, std::string& str, uint32_t maxStrLen, uint32_t& offset);
+int32_t xdr_decode_nBytes(uchar_t* src, std::vector<uchar_t>& bytes, uint32_t maxBytes, uint32_t& offset);
 
 void xdr_strip_lastFragment(uchar_t* dst);
 

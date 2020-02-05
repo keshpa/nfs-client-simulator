@@ -24,6 +24,9 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 
 #pragma once
 
@@ -54,3 +57,7 @@ class ScopedMemoryHandler {
 		mutable std::mutex mutex;
 		uchar_t* rawPtr;
 };
+
+static const std::string getLocalHostname();
+
+const std::string& getSelfFQDN();

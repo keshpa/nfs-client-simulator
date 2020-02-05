@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include "Context.hpp"
 #include "rpc.hpp"
+#include <iomanip>
 
 #define RECV_TIMEOUT		5
 
@@ -42,7 +43,15 @@ int main (int argc, char** argv)
 
 	context1->connect();
 	context1->setOperation(Context::NFSOPERATION::GetPort);
-	context1->makePortMapperRequest(RECV_TIMEOUT);
+	context1->makeMountPortMapperRequest(RECV_TIMEOUT);
+	std::string remote = "/default";
+	auto handle = context1->makeMountCall(5, remote, 3);
+
+	std::ostringstream oss;
+	for (uint32_t i = 0; i < handle.size(); ++i) {
+		oss << std::setfill('0') << std::setw(2) << std::hex << (uint32_t)handle[i] << " ";
+	}
+	DEBUG_LOG(CRITICAL) << "Handle received : " << oss.str();
 
 	sContexts.putContext(0);
 

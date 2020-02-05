@@ -19,6 +19,7 @@
 
 #include "logging/Logging.hpp"
 #include "descriptiveenum/DescriptiveEnum.hpp"
+#include "Utils.hpp"
 
 #include <memory>
 #include "Context.hpp"
@@ -87,4 +88,28 @@ uint64_t getMonotonic(int64_t seed) {
 	struct timespec ts;
 	static uint64_t sequential = (clock_gettime(CLOCK_REALTIME, &ts) == 0) ? (uint64_t)(ts.tv_sec*1000000000 + ts.tv_nsec) : (uint64_t) getRandomNumber(time(nullptr));
 	return __atomic_fetch_add(&sequential, 1, __ATOMIC_RELAXED);
+}
+
+#define HOSTNAME_SZ		1024
+static const std::string getLocalHostname() {
+	struct addrinfo hints, *info, *p;
+	int gai_result;
+	char hostname[HOSTNAME_SZ];
+	hostname[HOSTNAME_SZ-1] = '\0';
+	gethostname(hostname, HOSTNAME_SZ-1);
+
+	memset(&hints, 0, sizeof hints);
+	hints.ai_family = AF_UNSPEC; /*either IPV4 or IPV6*/
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_CANONNAME;
+
+	if ((gai_result = getaddrinfo(hostname, "http", &hints, &info)) != 0) {
+		DEBUG_LOG(CRITICAL) << "getaddrinfi failed : " << gai_strerror(gai_result);
+	}
+	return std::string(info->ai_canonname);
+}
+
+const std::string& getSelfFQDN() {
+	static std::string selfName = getLocalHostname();
+	return selfName;
 }

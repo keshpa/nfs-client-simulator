@@ -38,8 +38,21 @@ uint32_t xdr_encode_u64(uchar_t* dst, uint64_t u64) {
 int32_t xdr_encode_string(uchar_t* dst, const std::string& str) {
 	uint32_t strLen = str.length();
 	xdr_encode_u32(dst, strLen);
-	memcpy(&dst[4], str.c_str(), strLen+1); //But copy the null byte at the end
-	return strLen+1+4;
+	memcpy(&dst[4], str.c_str(), strLen); //But copy the null byte at the end
+	return strLen+4;
+}
+
+uint32_t xdr_encode_align(uchar_t* dst, uint32_t currentSize, uint32_t alignSize) {
+	uint32_t padding = 0;
+	if ((padding = (currentSize % alignSize)) == 0) {
+		return padding;
+	} else {
+		padding = alignSize - padding;
+		for (uint32_t i = 0; i < padding; ++i) {
+			dst[i] = 0;
+		}
+		return padding;
+	}
 }
 
 void xdr_encode_lastFragment(uchar_t* dst) {
@@ -54,6 +67,7 @@ uint32_t xdr_decode_u32(uchar_t* src, uint32_t& offset, bool trace) {
 	DASSERT(src);
 	uint32_t u32 = 0;
 	if (trace) {
+		printf("decode offset : %d.\n", offset);
 		printf("decode32 decoding %2.2x %2.2x %2.2x %2.2x.\n", src[offset+0], src[offset+1], src[offset+2], src[offset+3]);
 	}
 	u32 = (uint32_t)src[offset+0] << 24;
@@ -82,19 +96,32 @@ uint64_t xdr_decode_u64(uchar_t* src, uint32_t& offset, bool trace) {
 	return u64;
 }
 
-int32_t xdr_decode_string(uchar_t* src, std::string& str, int32_t maxStrLength, uint32_t& offset) {
-	auto strLen = xdr_decode_u32(&src[offset], offset);
+int32_t xdr_decode_string(uchar_t* src, std::string& str, uint32_t maxStrLength, uint32_t& offset) {
+	auto strLen = xdr_decode_u32(src, offset);
 	if (strLen < maxStrLength) {
 		str = std::string(reinterpret_cast<const char *>(&src[offset]));
 		if (str.length() == strLen) {
 			offset += strLen;
-			return strLen+4;
+			return strLen;
 		} else {
 			DEBUG_LOG(CRITICAL) << "String length does not match length in XDR header : " << str << " Expected length : " << strLen;
 			return -1;
 		}
 	} else {
 		DEBUG_LOG(CRITICAL) << "Bad string length. Maximum expected : " << maxStrLength << " but that in XDR header : " << strLen;
+		return -1;
+	}
+}
+
+int32_t xdr_decode_nBytes(uchar_t* src, std::vector<uchar_t>& bytes, uint32_t maxBytes, uint32_t& offset) {
+	auto byteLen = xdr_decode_u32(src, offset);
+	if (byteLen < maxBytes) {
+		for (uint32_t i = 0; i < byteLen; ++i) {
+			bytes.push_back(src[offset+i]);
+		}
+		return byteLen;
+	} else {
+		DEBUG_LOG(CRITICAL) << "Bad byte stream length. Maximum expected : " << maxBytes << " but that in XDR header : " << byteLen;
 		return -1;
 	}
 }
