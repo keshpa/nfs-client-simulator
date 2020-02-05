@@ -2,8 +2,7 @@
 #include "logging/Logging.hpp"
 #include <iomanip>
 
-void xdr_encode_u32(uchar_t* dst, uint32_t u32) {
-	DEBUG_LOG(CRITICAL) << "Encoding number : " << u32;
+uint32_t xdr_encode_u32(uchar_t* dst, uint32_t u32) {
 	DASSERT(dst);
 	dst[3] = (unsigned char)(u32 & 0xff);
 	u32 = u32 >> 8;
@@ -12,9 +11,10 @@ void xdr_encode_u32(uchar_t* dst, uint32_t u32) {
 	dst[1] = (unsigned char)(u32 & 0xff);
 	u32 = u32 >> 8;
 	dst[0] = (unsigned char)(u32);
+	return sizeof(uint32_t);
 }
 
-void xdr_encode_u64(uchar_t* dst, uint64_t u64) {
+uint32_t xdr_encode_u64(uchar_t* dst, uint64_t u64) {
 	DASSERT(dst);
 	dst[7] = (unsigned char)(u64 & 0xff);
 	u64 = u64 >> 8;
@@ -31,6 +31,8 @@ void xdr_encode_u64(uchar_t* dst, uint64_t u64) {
 	dst[1] = (unsigned char)(u64 & 0xff);
 	u64 = u64 >> 8;
 	dst[0] = (unsigned char)(u64);
+
+	return sizeof(uint64_t);
 }
 
 int32_t xdr_encode_string(uchar_t* dst, const std::string& str) {
@@ -40,35 +42,52 @@ int32_t xdr_encode_string(uchar_t* dst, const std::string& str) {
 	return strLen+1+4;
 }
 
-uint32_t xdr_decode_u32(uchar_t* src) {
+void xdr_encode_lastFragment(uchar_t* dst) {
+	*dst |= (1 << 7);
+}
+
+void xdr_strip_lastFragment(uchar_t* dst) {
+	*dst &= ~(1 << 7);
+}
+
+uint32_t xdr_decode_u32(uchar_t* src, uint32_t& offset, bool trace) {
 	DASSERT(src);
 	uint32_t u32 = 0;
-	u32 = (uint32_t)src[0] << 24;
-	u32 |= (uint32_t)src[1] << 16;
-	u32 |= (uint32_t)src[2] << 8;
-	u32 |= (uint32_t)src[3];
+	if (trace) {
+		printf("decode32 decoding %2.2x %2.2x %2.2x %2.2x.\n", src[offset+0], src[offset+1], src[offset+2], src[offset+3]);
+	}
+	u32 = (uint32_t)src[offset+0] << 24;
+	u32 |= (uint32_t)src[offset+1] << 16;
+	u32 |= (uint32_t)src[offset+2] << 8;
+	u32 |= (uint32_t)src[offset+3];
+	offset += sizeof(uint32_t);
 	return u32;
 }
 
-uint64_t xdr_decode_u64(uchar_t* src) {
+uint64_t xdr_decode_u64(uchar_t* src, uint32_t& offset, bool trace) {
 	DASSERT(src);
 	uint32_t u64 = 0UL;
-	u64 = (uint64_t)src[0] << 56;
-	u64 |= (uint64_t)src[1] << 48;
-	u64 |= (uint64_t)src[2] << 40;
-	u64 |= (uint64_t)src[3] << 32;
-	u64 |= (uint64_t)src[4] << 24;
-	u64 |= (uint64_t)src[5] << 16;
-	u64 |= (uint64_t)src[6] << 8;
-	u64 |= (uint64_t)src[7];
+	if (trace) {
+		printf("decode64 decoding %2.2x %2.2x %2.2x %2.2x %2.2x %2.2x %2.2x %2.2x.\n", src[offset+0], src[offset+1], src[offset+2], src[offset+3], src[offset+4], src[offset+5], src[offset+6], src[offset+7]);
+	}
+	u64 = (uint64_t)src[offset+0] << 56;
+	u64 |= (uint64_t)src[offset+1] << 48;
+	u64 |= (uint64_t)src[offset+2] << 40;
+	u64 |= (uint64_t)src[offset+3] << 32;
+	u64 |= (uint64_t)src[offset+4] << 24;
+	u64 |= (uint64_t)src[offset+5] << 16;
+	u64 |= (uint64_t)src[offset+6] << 8;
+	u64 |= (uint64_t)src[offset+7];
+	offset += sizeof(uint64_t);
 	return u64;
 }
 
-int32_t xdr_decode_string(uchar_t* src, std::string& str, int32_t maxStrLength) {
-	auto strLen = xdr_decode_u32(src);
+int32_t xdr_decode_string(uchar_t* src, std::string& str, int32_t maxStrLength, uint32_t& offset) {
+	auto strLen = xdr_decode_u32(&src[offset], offset);
 	if (strLen < maxStrLength) {
-		str = std::string(reinterpret_cast<const char *>(&src[4]));
+		str = std::string(reinterpret_cast<const char *>(&src[offset]));
 		if (str.length() == strLen) {
+			offset += strLen;
 			return strLen+4;
 		} else {
 			DEBUG_LOG(CRITICAL) << "String length does not match length in XDR header : " << str << " Expected length : " << strLen;

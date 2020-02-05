@@ -75,10 +75,16 @@ int64_t getRandomNumber(uint32_t seed) {
 	if (seed) {
 		srandom(seed);
 	}
-	return random();
+	uint64_t rand64;
+	rand64 = random();
+	rand64 = rand64 << 32;
+	rand64 |= random();
+	rand64 &= 0x00000000ffffffff;
+	return rand64;
 }
 
 uint64_t getMonotonic(int64_t seed) {
-	static uint64_t sequential = (uint64_t) getRandomNumber(time(nullptr));
+	struct timespec ts;
+	static uint64_t sequential = (clock_gettime(CLOCK_REALTIME, &ts) == 0) ? (uint64_t)(ts.tv_sec*1000000000 + ts.tv_nsec) : (uint64_t) getRandomNumber(time(nullptr));
 	return __atomic_fetch_add(&sequential, 1, __ATOMIC_RELAXED);
 }

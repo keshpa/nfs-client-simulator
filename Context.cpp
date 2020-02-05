@@ -1,9 +1,12 @@
 #include "Context.hpp"
 #include "Utils.hpp"
 #include "xdr.hpp"
+#include "rpc.hpp"
 
 #include <sys/types.h>
+#include <sys/time.h>
 #include <sys/socket.h>
+#include <iomanip>
 #include <netdb.h>
 
 int Context::connect() {
@@ -38,6 +41,20 @@ int Context::connect() {
         DEBUG_LOG(CRITICAL) << "Failed to connect to server : " << server << " at port : " << port << " with error : " << strerror(errno);
     }
 
+	uint32_t timeout = 5;
+	struct timeval tv;
+	tv.tv_usec = 0;
+	tv.tv_sec = timeout;
+	if (timeout <= 0) {
+		DEBUG_LOG(CRITICAL) << "Too big timeout for receive on socket";
+	}
+	error = setsockopt(socketFd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof (tv));
+	if (error != 0) {
+		error = errno;
+		DEBUG_LOG(CRITICAL) << "Receive timeout set failure : " << strerror(error);
+		return -1;
+	}
+
 	getPortMapperContext().setContext(shared_from_this());
     freeaddrinfo(info);
 	time(&connectTime);
@@ -48,7 +65,7 @@ int Context::connect() {
 	return 0;
 }
 
-int32_t Context::send(uchar_t* wireBytes, int32_t size) {
+int32_t Context::send(uchar_t* wireBytes, int32_t size, bool trace) {
 	if (size == 0) {
 		DEBUG_LOG(CRITICAL) << "Empty send";
 		return 0;
@@ -59,38 +76,34 @@ int32_t Context::send(uchar_t* wireBytes, int32_t size) {
 		DEBUG_LOG(CRITICAL) << "Bad socket";
 		return -1;
 	}
+
+	if (trace) {
+		DEBUG_LOG(CRITICAL) << "Socket fd : " << socketFd;
+		DEBUG_LOG(CRITICAL) << "Sending message of length : " << size;
+		std::ostringstream oss;
+		for (int i = 0; i < size; ++i) {
+			oss << std::setfill('0') << std::setw(2) << std::hex << (uint32_t)wireBytes[i] << " ";
+		}
+		DEBUG_LOG(CRITICAL) << oss.str();
+	}
 	while (pending) {
-		auto written = ::send(socketFd, &wireBytes[pending], pending, 0);
+		auto written = ::send(socketFd, &wireBytes[size-pending], pending, 0);
 		if (written >= 0) {
 			DASSERT(written <= pending);
 			pending -= written;
 		} else {
 			error = errno;
-			DEBUG_LOG(CRITICAL) << "Send failed : " << strerror(error);
+			DEBUG_LOG(CRITICAL) << "Send failure with written : " << written << ": " << strerror(error);
 			return -1;
 		}
 	}
 	return pending;
 }
 
-int32_t Context::receive(uchar_t* wireBytes, int32_t& size) {
-	int32_t timeout = 5;
+int32_t Context::receive(uchar_t* wireBytes, int32_t& size, bool trace) {
 	std::lock_guard<std::mutex> lock(mutex);
 	if (socketFd == -1) {
 		DEBUG_LOG(CRITICAL) << "Bad socket";
-		return -1;
-	}
-	struct timeval tv;
-	tv.tv_usec = 0;
-	tv.tv_sec = timeout;
-	if (timeout <= 0) {
-		DEBUG_LOG(CRITICAL) << "Too big timeout for receive on socket";
-	}
-
-	error = setsockopt(socketFd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof (tv));
-	if (error < 0) {
-		error = errno;
-		DEBUG_LOG(CRITICAL) << "Receive timeout set failure : " << strerror(error);
 		return -1;
 	}
 	int32_t pending = 4;
@@ -99,22 +112,35 @@ int32_t Context::receive(uchar_t* wireBytes, int32_t& size) {
 
 	while (pending) {
 		error = recv(socketFd, &wireBytes[size-pending], pending, 0);
-		if (error <= 0) {
+		if (error < 0) {
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
 				continue;
 			} else if (error < 0) {
 				error = errno;
-				DEBUG_LOG(CRITICAL) << "Send failed : " << strerror(error);
+				DEBUG_LOG(CRITICAL) << "Receive failed : " << strerror(error);
 				return -1;
 			}
 		} else {
+//			DEBUG_LOG(CRITICAL) << "Read : " << error << "bytes";
 			pending -= error;
 			if (not rpcSizeHeaderReceived && pending == 0) {
 				rpcSizeHeaderReceived = true;
-				size = pending = xdr_decode_u32(wireBytes);
-				DEBUG_LOG(CRITICAL) << "Expecting response of size : " << size;
+				xdr_strip_lastFragment(wireBytes);
+				uint32_t recvOffset = 0;
+				size = pending = xdr_decode_u32(wireBytes, recvOffset);
+//				DEBUG_LOG(CRITICAL) << "Expecting response of size : " << size;
 			}
 		}
+	}
+
+	if (trace) {
+		DEBUG_LOG(CRITICAL) << "Socket fd : " << socketFd;
+		DEBUG_LOG(CRITICAL) << "Received message of length : " << size;
+		std::ostringstream oss;
+		for (int i = 0; i < size; ++i) {
+			oss << std::setfill('0') << std::setw(2) << std::hex << (uint32_t)wireBytes[i] << " ";
+		}
+		DEBUG_LOG(CRITICAL) << oss.str();
 	}
 	return pending;
 }
@@ -148,7 +174,8 @@ void Context::makePortMapperRequest(int32_t rcvTimeo) {
 		DEBUG_LOG(CRITICAL) << "Only support PortMapper operation is : GetPort" << " Passed operation : " << Context::NFSOPERATIONImage::printEnum(operation);
 	}
 
-	getPortMapperContext().setVersion(RPC_VERSION::RPC_VERSION2);
+	getPortMapperContext().setRPCVersion(RPC_VERSION::RPC_VERSION2);
+	getPortMapperContext().setProgramVersion(PROGRAM_VERSION::PROGRAM_VERSION2);
 	getPortMapperContext().setAuthType(AUTH_TYPE::AUTH_SYS);
 	uchar_t* wireRequest = new uchar_t [GETPORT_REQUEST_SIZE];
 
@@ -160,35 +187,11 @@ void Context::makePortMapperRequest(int32_t rcvTimeo) {
 
 	ScopedMemoryHandler mainRequest(wireRequest);
 
-	auto xid = getMonotonic(0L);
-	xdr_encode_u64(&wireRequest[requestSize], xid);
-	requestSize += sizeof(uint64_t);
-	mem_dump("After encoding xid ", wireRequest, requestSize, xid);
+	uint32_t xid = (uint32_t)getMonotonic(0UL);
 
-	xdr_encode_u32(&wireRequest[requestSize], static_cast<uint32_t>(RPCTYPE::CALL));
-	requestSize += sizeof(uint32_t);
-	mem_dump("After encoding CALL ", wireRequest, requestSize, Context::RPCTYPEImage::printEnum(RPCTYPE::CALL));
+	requestSize = RPC::makeRPC(xid, RPCTYPE::CALL, getPortMapperContext().getRPCVersion(), RPC_PROGRAM::PORTMAP, getPortMapperContext().getProgramVersion(), PORTMAPPER::PMAPPROC_GETPORT, wireRequest);
 
-	xdr_encode_u32(&wireRequest[requestSize], static_cast<uint32_t>(getPortMapperContext().getVersion()));
-	requestSize += sizeof(uint32_t);
-	mem_dump("After encoding RPC Version ", wireRequest, requestSize, Context::RPC_VERSIONImage::printEnum(getPortMapperContext().getVersion()));
-
-	xdr_encode_u32(&wireRequest[requestSize], static_cast<uint32_t>(RPC_PROGRAM::PORTMAP));
-	requestSize += sizeof(uint32_t);
-	mem_dump("After encoding RPC program ", wireRequest, requestSize, Context::RPC_PROGRAMImage::printEnum(RPC_PROGRAM::PORTMAP));
-
-	xdr_encode_u32(&wireRequest[requestSize], static_cast<uint32_t>(getPortMapperContext().getVersion()));
-	requestSize += sizeof(uint32_t);
-	mem_dump("After encoding RPC Version ", wireRequest, requestSize, Context::RPC_VERSIONImage::printEnum(getPortMapperContext().getVersion()));
-
-	xdr_encode_u32(&wireRequest[requestSize], static_cast<uint32_t>(PORTMAPPER::PMAPPROC_GETPORT));
-	requestSize += sizeof(uint32_t);
-	mem_dump("After encoding RPC call ", wireRequest, requestSize, Context::PORTMAPPERImage::printEnum(PORTMAPPER::PMAPPROC_GETPORT));
-
-	xdr_encode_u32(&wireRequest[requestSize], static_cast<uint32_t>(getPortMapperContext().getAuthType()));
-	requestSize += sizeof(uint32_t);
-	mem_dump("After encoding RPC Version ", wireRequest, requestSize, Context::AUTH_TYPEImage::printEnum(getPortMapperContext().getAuthType()));
-
+	requestSize += xdr_encode_u32(&wireRequest[requestSize], static_cast<uint32_t>(PORTMAPPER::PMAPPROC_GETPORT));
 
 	uchar_t* wireCredRequest = new uchar_t [CRED_REQUEST_SIZE];
 	uint64_t credRequestSize = 0UL;
@@ -199,72 +202,47 @@ void Context::makePortMapperRequest(int32_t rcvTimeo) {
 
 	ScopedMemoryHandler credRequest(wireCredRequest);
 
-	uint32_t auth_stamp = static_cast<uint32_t>(getRandomNumber(0L));
-	xdr_encode_u32(&wireCredRequest[credRequestSize], auth_stamp);
-	credRequestSize += sizeof(uint32_t);
-	mem_dump("After encoding auth_stamp in temporary", wireCredRequest, credRequestSize, auth_stamp);
-
 	if (getPortMapperContext().getAuthType() == AUTH_TYPE::AUTH_SYS) {
-		xdr_encode_u32(&wireCredRequest[credRequestSize], 1); // One cred entry
-		credRequestSize += sizeof(uint32_t);
-		mem_dump("After number of creds as 1 in temporary", wireCredRequest, credRequestSize, 1);
 
-		auto credPayloadSizeOffset = credRequestSize;
-		xdr_encode_u32(&wireCredRequest[credRequestSize], 0); // Number of bytes in the credential. Reencoded later
-		credRequestSize += sizeof(uint32_t);
-		mem_dump("After encoding size of cred payload in temporary", wireCredRequest, credRequestSize, 0);
+		auto credSize = RPC::addAuthSys(wireCredRequest);
 
-		std::string authMachine = std::string("machinename");
-		credRequestSize += xdr_encode_string(&wireCredRequest[credRequestSize], authMachine);
-		mem_dump("After encoding [machinename] in temporary", wireCredRequest, credRequestSize, auth_stamp);
-
-		xdr_encode_u32(&wireCredRequest[credRequestSize], 0); // Encode UID number 0
-		credRequestSize += sizeof(uint32_t);
-		mem_dump("After encoding UID:0 in temporary", wireCredRequest, credRequestSize, 0);
-
-		xdr_encode_u32(&wireCredRequest[credRequestSize], 0); // Encode GID number 0
-		credRequestSize += sizeof(uint32_t);
-		mem_dump("After encoding GID:0 in temporary", wireCredRequest, credRequestSize, 0);
-
-		xdr_encode_u32(&wireCredRequest[credRequestSize], 1); // One UID::GID pair
-		credRequestSize += sizeof(uint32_t);
-		mem_dump("After encoding number of UID:GID pair [1] in temporary", wireCredRequest, credRequestSize, 1);
-
-		xdr_encode_u32(&wireCredRequest[credRequestSize], 0); // Declare one system GID 
-		credRequestSize += sizeof(uint32_t);
-		mem_dump("After encoding one system GID [0] in temporary", wireCredRequest, credRequestSize, 0);
-
-		xdr_encode_u32(&wireCredRequest[credPayloadSizeOffset], credRequestSize-credPayloadSizeOffset); // Declare one system GID 
-		mem_dump("After correcting cred payload size in header of temporary", wireCredRequest, credRequestSize, credRequestSize-credPayloadSizeOffset);
-
-		memcpy(&wireRequest[requestSize], wireCredRequest, credRequestSize);
-		requestSize += credRequestSize;
-		mem_dump("portmapper request without trailer", wireRequest, requestSize, 0);
-
-
-		xdr_encode_u32(&wireRequest[requestSize], static_cast<uint32_t>(AUTH_TYPE::AUTH_NONE));
-		requestSize += sizeof(uint32_t);
-		mem_dump("After encoding TRAILING AUTH_NONE", wireRequest, requestSize, Context::AUTH_TYPEImage::printEnum(AUTH_TYPE::AUTH_NONE));
-
-		xdr_encode_u32(&wireRequest[requestSize], 0);
-		requestSize += sizeof(uint32_t);
-		mem_dump("After encoding TRAILING padding", wireRequest, requestSize, 0);
-
-		send(wireRequest, requestSize);
-
-		uchar_t* wireResponse = new uchar_t [GETPORT_RESPONSE_SIZE];
-		int32_t responseSize = 0;
-		if (!wireResponse) {
-			MEM_ALLOC_FAILURE("Failed to allocate memory to receive GETPORT ", __FUNCTION__);
-			return;
-		}
-		ScopedMemoryHandler mainResponse(wireResponse);
-
-		receive(wireResponse, responseSize);
-		mem_dump("GETPORT response", wireResponse, responseSize, 0);
-
+		memcpy(&wireRequest[requestSize], wireCredRequest, credSize);
+		requestSize += credSize;
 	} else {
 		DEBUG_LOG(CRITICAL) << "Auth type not supported : " << Context::AUTH_TYPEImage::printEnum(getPortMapperContext().getAuthType());
 		return;
 	}
+
+	xdr_encode_u32(&wireRequest[requestSize], static_cast<uint32_t>(RPC_PROGRAM::MOUNT)); // mount program
+	requestSize += sizeof(uint32_t);
+
+	xdr_encode_u32(&wireRequest[requestSize], static_cast<uint32_t>(MOUNT_VER::VERSION3)); // Version of mount program
+	requestSize += sizeof(uint32_t);
+
+	xdr_encode_u32(&wireRequest[requestSize], static_cast<uint32_t>(PROTOCOL_TYPE::IPPROTO_TCP)); // Version of mount program
+	requestSize += sizeof(uint32_t);
+
+	xdr_encode_u32(&wireRequest[requestSize], 0); // Dummy zero port number
+	requestSize += sizeof(uint32_t);
+
+	xdr_encode_u32(&wireRequest[0], requestSize-sizeof(uint32_t)); // Subtract the length of the first uint32_t containing LAST_FRAGMENT
+	xdr_encode_lastFragment(wireRequest);
+
+	uchar_t* wireResponse = new uchar_t [GETPORT_RESPONSE_SIZE];
+	int32_t responseSize = 0;
+	if (!wireResponse) {
+		MEM_ALLOC_FAILURE("Failed to allocate memory to receive GETPORT ", __FUNCTION__);
+		return;
+	}
+	ScopedMemoryHandler mainResponse(wireResponse);
+
+	send(wireRequest, requestSize);
+	receive(wireResponse, responseSize);
+
+	uchar_t* payload = RPC::parseAndStripRPC(wireResponse, responseSize, xid);	
+
+	uint32_t payloadOffset = 0;
+	uint32_t mountPort = xdr_decode_u32(payload, payloadOffset);
+
+	DEBUG_LOG(CRITICAL) << "Mount port to be used is : " << mountPort;
 }

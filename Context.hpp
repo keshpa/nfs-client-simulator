@@ -32,8 +32,8 @@ class Context : public std::enable_shared_from_this<Context> {
 		Context(std::string& server, int32_t port) : server(server), port(port), error(0), returnValue(0), returnString(nullptr), operationType(NFSOPERATION::None), socketFd(-1) {}
 
 		int32_t connect();
-		int32_t send(uchar_t* wireBytes, int32_t size);
-		int32_t receive(uchar_t* wireBytes, int32_t& size);
+		int32_t send(uchar_t* wireBytes, int32_t size, bool trace = false);
+		int32_t receive(uchar_t* wireBytes, int32_t& size, bool trace = false);
 		void printStatus();
 		void setOperation(NFSOPERATION operation);
 		NFSOPERATION getOperation();
@@ -62,6 +62,12 @@ class Context : public std::enable_shared_from_this<Context> {
 			UNKNOWN = 255
 		);
 
+		DESC_CLASS_ENUM(PROGRAM_VERSION, uint32_t,
+			None = -1,
+			PROGRAM_VERSION2 = 2,
+			PROGRAM_VERSION3 = 3
+		);
+
 		DESC_CLASS_ENUM(RPC_PROGRAM, uint32_t,
 			PORTMAP = 100000,
 			NFS = 100003,
@@ -79,21 +85,36 @@ class Context : public std::enable_shared_from_this<Context> {
 			UNKNOWN
 		);
 
+		DESC_CLASS_ENUM(MOUNT_VER, uint32_t,
+			None = -1,
+			VERSION3 = 3
+		);
+
+		DESC_CLASS_ENUM(PROTOCOL_TYPE, uint32_t,
+			IPPROTO_TCP = 6,
+			IPPROTO_UDP = 17,
+		);
+
 
 		class PortMapperContext {
 			public:
 				PortMapperContext()
-		  	  : port(0), error(0), rpcVersion(RPC_VERSION::None), authType(AUTH_TYPE::AUTH_INVALID) {};
+		  	  : port(0), error(0), rpcVersion(RPC_VERSION::None), programVersion(PROGRAM_VERSION::None), authType(AUTH_TYPE::AUTH_INVALID) {};
 
 				int32_t getPort() const {
 					return port;
 				}
-				void setVersion(RPC_VERSION version) {
+
+				void setRPCVersion(RPC_VERSION version) {
 					rpcVersion = version;
 				}
-				RPC_VERSION getVersion() const {
+				RPC_VERSION getRPCVersion() const {
 					return rpcVersion;
 				}
+				PROGRAM_VERSION getProgramVersion() const {
+					return programVersion;
+				}
+
 				void setAuthType(AUTH_TYPE auth) {
 					authType = auth;
 				}
@@ -102,6 +123,9 @@ class Context : public std::enable_shared_from_this<Context> {
 				}
 				friend class Context;
 			private:
+				void setProgramVersion(PROGRAM_VERSION version) {
+					programVersion = version;
+				}
 				void setContext(const std::shared_ptr<Context>& myContext) {
 					context = myContext;
 				}
@@ -113,6 +137,7 @@ class Context : public std::enable_shared_from_this<Context> {
 				int32_t	port;
 				int32_t error;
 				RPC_VERSION rpcVersion;
+				PROGRAM_VERSION programVersion;
 				AUTH_TYPE authType;
 		};
 		void makePortMapperRequest(int32_t rcvTimeo);
