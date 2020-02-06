@@ -16,6 +16,11 @@
 #include <time.h>
 #include <mutex>
 
+using handle = std::vector<uchar_t>;
+using handle_p = std::shared_ptr<handle>;
+using iName = std::string;
+using iName_p = std::shared_ptr<std::string>;
+
 class Context : public std::enable_shared_from_this<Context> {
 	public:
 		DESC_CLASS_ENUM(NFSOPERATION, size_t,
@@ -29,13 +34,16 @@ class Context : public std::enable_shared_from_this<Context> {
 			UNSHARE,
 			UNKNOWN
 		);
-		Context(std::string& server, int32_t port) : server(server), port(port), error(0), returnValue(0), returnString(nullptr), operationType(NFSOPERATION::None), socketFd(-1), totalSent(0UL), totalReceived(0UL) {}
+		Context(std::string& server, int32_t port) : server(server), port(port), error(0), returnValue(0), returnString(nullptr), operationType(NFSOPERATION::None), socketFd(-1), totalSent(0UL), totalReceived(0UL), mountPort(-1), nfsPort(-1) {}
 
 		int32_t connect();
+		int32_t connect(int32_t port);
 		void disconnect();
 		int32_t send(uchar_t* wireBytes, int32_t size, bool trace = false);
 		int32_t receive(uint32_t timeout, uchar_t* wireBytes, int32_t& size, bool trace = false);
 		void printStatus();
+		uint32_t getPort(int32_t rcvTimeo, uint32_t program, uint32_t version);
+
 		void setOperation(NFSOPERATION operation);
 		NFSOPERATION getOperation();
 
@@ -104,11 +112,7 @@ class Context : public std::enable_shared_from_this<Context> {
 		class PortMapperContext {
 			public:
 				PortMapperContext()
-		  	  : port(0), mountPort(0), error(0), rpcVersion(RPC_VERSION::None), programVersion(PROGRAM_VERSION::None), authType(AUTH_TYPE::AUTH_INVALID) {};
-
-				int32_t getPort() const {
-					return port;
-				}
+		  	  : rpcVersion(RPC_VERSION::None), programVersion(PROGRAM_VERSION::None), authType(AUTH_TYPE::AUTH_INVALID) {};
 
 				void setRPCVersion(RPC_VERSION version) {
 					rpcVersion = version;
@@ -127,38 +131,29 @@ class Context : public std::enable_shared_from_this<Context> {
 					return authType;
 				}
 
-				uint32_t getMountPort() const {
-					return mountPort;
-				}
-
 				friend class Context;
 			private:
-				void setMountPort(uint32_t port) {
-					mountPort = port;
-				}
 				void setProgramVersion(PROGRAM_VERSION version) {
 					programVersion = version;
 				}
 				void setContext(const std::shared_ptr<Context>& myContext) {
 					context = myContext;
 				}
-				void setPort(int32_t value, int32_t err) {
-					port = value;
-					error = err;
-				}
 				std::shared_ptr<Context> context;
-				int32_t	port;
-				int32_t	mountPort;
-				int32_t error;
 				RPC_VERSION rpcVersion;
 				PROGRAM_VERSION programVersion;
 				AUTH_TYPE authType;
 		};
 
-		uint32_t makeMountPortMapperRequest(int32_t rcvTimeo);
+		int32_t getMountPort(uint32_t rcvTimeo);
+		int32_t getNfsPort(uint32_t rcvTimeo);
+
 		PortMapperContext& getPortMapperContext() {
 			return portMapperDetails;
 		}
+
+		int32_t connectNfsPort(uint32_t timeout);
+		int32_t connectMountPort(uint32_t timeout);
 
 		DESC_CLASS_ENUM(MOUNTPROG, uint32_t,
 			MOUNTPROC3_NULL = 0,
@@ -185,14 +180,7 @@ class Context : public std::enable_shared_from_this<Context> {
 
 		class MountContext {
 			public:
-				MountContext() : mountPort(-1), error(0), mountVersion(-1), authType(AUTH_TYPE::None) {}
-				void setMountPort(uint32_t port) {
-					mountPort = port;
-				}
-
-				uint32_t getMountPort() const {
-					return mountPort;
-				}
+				MountContext() : mountVersion(-1), authType(AUTH_TYPE::None) {}
 
 				void setMountPath(const std::string& remote) {
 					mountExport = remote;
@@ -210,7 +198,7 @@ class Context : public std::enable_shared_from_this<Context> {
 					return mountVersion;
 				}
 
-				std::vector<uchar_t>& getMountHandle() {
+				handle& getMountHandle() {
 					return mountHandle;
 				}
 
@@ -220,30 +208,139 @@ class Context : public std::enable_shared_from_this<Context> {
 					context = myContext;
 				}
 
-				void setMountHandle(const std::vector<uchar_t> handle) {
-					mountHandle = handle;
+				void setMountHandle(const handle& myHandle) {
+					mountHandle = myHandle;
 				}
-				uint32_t mountPort;
 				std::shared_ptr<Context> context;
-				int32_t error;
-				std::vector<uchar_t> mountHandle;
+				handle mountHandle;
 				uint32_t mountVersion;
 				std::string mountExport;
 				AUTH_TYPE authType;
 		};
 
-		const std::vector<uchar_t>& makeMountCall(uint32_t timeout, const std::string& remote, uint32_t mountVersion);
+		const handle& makeMountCall(uint32_t timeout, const std::string& remote, uint32_t mountVersion);
 		MountContext& getMountContext() {
 			return mountContext;
 		}
 
-		const std::vector<uchar_t>& getMountHandle(uint32_t i) {
+		const handle& getMountHandle(uint32_t i) {
 			return mountHandles.at(i);
 		}
 
+		void makeUmountCall(uint32_t timeout, const std::string& remote, uint32_t mountVersion);
+
+		class Permissions {
+			public:
+				DESC_CLASS_ENUM(PERMS, uint32_t,
+					None = 0,
+					OTHER_R = 0x0400,
+					OTHER_W = 0x0200,
+					OTHER_X = 0x0100,
+					GROUP_R = 0x040,
+					GROUP_W = 0x020,
+					GROUP_X = 0x010,
+					SELF_R = 0x04,
+					SELF_W = 0x02,
+					SELF_X = 0x01,
+				);
+
+				static uint32_t makeDefault() {
+					uint32_t mode = static_cast<uint32_t>(PERMS::OTHER_R);
+					mode |= static_cast<uint32_t>(PERMS::OTHER_W);
+					mode |= static_cast<uint32_t>(PERMS::OTHER_X);
+					mode |= static_cast<uint32_t>(PERMS::GROUP_R);
+					mode |= static_cast<uint32_t>(PERMS::GROUP_W);
+					mode |= static_cast<uint32_t>(PERMS::GROUP_X);
+					mode |= static_cast<uint32_t>(PERMS::SELF_R);
+					mode |= static_cast<uint32_t>(PERMS::SELF_W);
+					mode |= static_cast<uint32_t>(PERMS::SELF_X);
+					return mode;
+				}
+
+				Permissions(uint32_t mode) : mode(mode) {}
+				Permissions() : mode(makeDefault()) {}
+
+			private:
+				uint32_t mode;
+		};
+
+		class Inode {
+			public:
+				DESC_CLASS_ENUM(INODE_TYPE, uint32_t,
+					None = -1,
+					Regular = 1,
+					Directory,
+					Special,
+					Unknown = 255
+				);
+				Inode(iName_p& parent, const iName& name, INODE_TYPE type) : self(name), type(type) {
+					std::string myName = name;
+					stripSlash(myName);
+					if (type == INODE_TYPE::Directory) {
+						std::string self = *parent + "/" + myName;
+						selfDir = std::make_shared<std::string>(self);
+					} else if (type == INODE_TYPE::Regular || type == INODE_TYPE::Special) {
+						self = myName;
+					}
+					parentName = parent;
+				}
+
+				static int32_t move(const std::shared_ptr<Context>& context, const iName_p& oldHandle, const iName_p& newHandle);
+				static const handle& lookup(std::shared_ptr<Context>& context, uint32_t timeout, const iName& child, const handle& parent);
+				static const handle& makeMkdir(const std::shared_ptr<Context>& context, uint32_t timeout, const iName_p& parent, const iName& dirName);
+				static const handle& makeFile(const std::shared_ptr<Context>& context, uint32_t timeout, const iName_p& parent, const iName& fileName);
+				static const void unlinkDir(const std::shared_ptr<Context>& context, uint32_t timeout, const iName_p& parent, const iName& dirName);
+				static const void unlinkFile(const std::shared_ptr<Context>& context, uint32_t timeout, const iName_p& parent, const iName& fileName);
+				static const int64_t read(const std::shared_ptr<Context>& context, uint32_t timeout, const iName_p& parent, const iName& fileName,
+											uint64_t offset, uint64_t size, uchar_t* dst);
+				static const int64_t write(const std::shared_ptr<Context>& context, uint32_t timeout, const iName_p& parent, const iName& fileName,
+											uint64_t offset, uint64_t size, uchar_t* dst);
+
+				int32_t makeHandle(const std::shared_ptr<Context>& context);
+				int32_t releaseHandle(const std::shared_ptr<Context>& context);
+
+			private:
+
+				static void stripSlash(iName& name) {
+					static std::string slash = "/";
+					size_t found = name.rfind(slash);
+					while (found != std::string::npos) {
+						name.replace(found, slash.length(), "");
+						found = name.rfind(slash);
+					}
+				}
+
+				INODE_TYPE type;
+				Permissions perms;
+				iName_p parentName; // Fully qualified
+				iName self; // Not fully qualified if regular, otherwise fully qualified
+				iName_p selfDir; // Not fully qualified if regular, otherwise fully qualified
+				handle_p selfHandle;
+				std::map<std::string, Inode> children; // names here are NEVER fully qualified
+				mutable std::mutex	mutex;
+		};
+		using Inode_p = std::shared_ptr<Inode>;
+
+		int32_t getMountPortLocal() const {
+			return mountPort;
+		}
+
+		int32_t getNfsPortLocal() const {
+			return nfsPort;
+		}
+
 	private:
-		void addMountHandle(const std::vector<uchar_t> handle) {
-			mountHandles.push_back(handle);
+		void addMountHandle(const std::string& remote, const handle& myHandle) {
+			std::lock_guard<std::mutex> lock(mutex);
+			mountHandles.push_back(myHandle);
+			auto iter = tree.find(remote);
+			if (iter != tree.end()) {
+				return;
+			}
+			iName_p parent = std::make_shared<iName>(remote);	
+			Inode_p inode = std::make_shared<Inode>(parent, "/", Inode::INODE_TYPE::Directory);
+			tree.insert({*parent, inode});
+			return;
 		}
 
 		std::string server;
@@ -262,7 +359,10 @@ class Context : public std::enable_shared_from_this<Context> {
 		std::mutex mutex;
 		PortMapperContext portMapperDetails;
 		MountContext mountContext;
-		std::vector<std::vector<uchar_t>> mountHandles;
+		std::vector<handle> mountHandles;
+		int32_t mountPort;
+		int32_t nfsPort;
+		std::map<iName, Inode_p> tree; // Root entries of the tree have iName same as export of remote
 };
 
 using Context_p = std::shared_ptr<Context>;

@@ -42,8 +42,7 @@ int main (int argc, char** argv)
 	Context_p context1 = sContexts.getContext(0);
 
 	context1->connect();
-	context1->setOperation(Context::NFSOPERATION::GetPort);
-	context1->makeMountPortMapperRequest(RECV_TIMEOUT);
+	context1->getMountPort(RECV_TIMEOUT);
 	std::string remote = "/default";
 	auto handle = context1->makeMountCall(5, remote, 3);
 
@@ -52,6 +51,8 @@ int main (int argc, char** argv)
 		oss << std::setfill('0') << std::setw(2) << std::hex << (uint32_t)handle[i] << " ";
 	}
 	DEBUG_LOG(CRITICAL) << "Handle received : " << oss.str();
+
+	context1->makeUmountCall(5, remote, 3);
 
 	sContexts.putContext(0);
 

@@ -105,7 +105,6 @@ class RPC {
 				successType = static_cast<RPC_SUCCESS>(xdr_decode_u32(wireResponse, parsedOffset));
 				if (successType == RPC_SUCCESS::SUCCESS) {
 						uchar_t* returnValue = &wireResponse[parsedOffset];
-						DEBUG_LOG(CRITICAL) << "Payload at offset : " << parsedOffset;
 						return returnValue;
 				} else {
 					if (successType == RPC_SUCCESS::PROG_MISMATCH) {
