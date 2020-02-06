@@ -41,8 +41,7 @@ int main (int argc, char** argv)
 
 	Context_p context1 = sContexts.getContext(0);
 
-	context1->connect();
-	context1->getMountPort(RECV_TIMEOUT);
+//	context1->connect();
 	std::string remote = "/default";
 	auto handle = context1->makeMountCall(5, remote, 3);
 
@@ -51,6 +50,8 @@ int main (int argc, char** argv)
 		oss << std::setfill('0') << std::setw(2) << std::hex << (uint32_t)handle[i] << " ";
 	}
 	DEBUG_LOG(CRITICAL) << "Handle received : " << oss.str();
+
+	Context::Inode::lookup(context1, RECV_TIMEOUT, "/", handle);
 
 	context1->makeUmountCall(5, remote, 3);
 

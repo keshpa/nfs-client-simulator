@@ -34,7 +34,7 @@ class Context : public std::enable_shared_from_this<Context> {
 			UNSHARE,
 			UNKNOWN
 		);
-		Context(std::string& server, int32_t port) : server(server), port(port), error(0), returnValue(0), returnString(nullptr), operationType(NFSOPERATION::None), socketFd(-1), totalSent(0UL), totalReceived(0UL), mountPort(-1), nfsPort(-1) {}
+		Context(std::string& server, int32_t port) : server(server), portMapperPort(port), port(-1), error(0), returnValue(0), returnString(nullptr), operationType(NFSOPERATION::None), socketFd(-1), totalSent(0UL), totalReceived(0UL), mountPort(-1), nfsPort(-1) {}
 
 		int32_t connect();
 		int32_t connect(int32_t port);
@@ -105,10 +105,6 @@ class Context : public std::enable_shared_from_this<Context> {
 			IPPROTO_UDP = 17,
 		);
 
-		void setPort(uint32_t newPort) {
-			port = newPort;
-		}
-
 		class PortMapperContext {
 			public:
 				PortMapperContext()
@@ -152,6 +148,7 @@ class Context : public std::enable_shared_from_this<Context> {
 			return portMapperDetails;
 		}
 
+		int32_t connectPortMapperPort(uint32_t timeout);
 		int32_t connectNfsPort(uint32_t timeout);
 		int32_t connectMountPort(uint32_t timeout);
 
@@ -345,6 +342,7 @@ class Context : public std::enable_shared_from_this<Context> {
 
 		std::string server;
 		int32_t	port;
+		int32_t portMapperPort;
 		int32_t error;
 		int32_t connectError;
 		int32_t returnValue;

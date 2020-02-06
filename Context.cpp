@@ -59,18 +59,15 @@ int32_t Context::connect() {
     freeaddrinfo(info);
 	time(&connectTime);
 	timem = localtime(&connectTime);
-	printStatus();
     DASSERT(!error);
 
 	return 0;
 }
 
 int32_t Context::connect(int32_t newPort) {
-	if (newPort == port) {
-		return 0;
-	}
 	disconnect();
 	port = newPort;
+	DEBUG_LOG(CRITICAL) << "Connecting to port : " << newPort;
 	return connect();
 }
 
@@ -214,6 +211,7 @@ void Context::printStatus() {
 #define CRED_REQUEST_SIZE		512
 
 uint32_t Context::getPort(int32_t rcvTimeo, uint32_t program, uint32_t version) {
+	connectPortMapperPort(rcvTimeo);
 	auto operation = NFSOPERATION::GetPort;
 	getPortMapperContext().setRPCVersion(RPC_VERSION::RPC_VERSION2);
 	getPortMapperContext().setProgramVersion(PROGRAM_VERSION::PROGRAM_VERSION2);
@@ -300,7 +298,6 @@ int32_t Context::getMountPort(uint32_t rcvTimeo) {
 		mountPort = port;
 	}
 
-	DEBUG_LOG(CRITICAL) << "Mount port to be used is : " << mountPort;
 	return mountPort;
 }
 
@@ -378,7 +375,7 @@ const handle& Context::makeMountCall(uint32_t timeout, const std::string& remote
 	ScopedMemoryHandler mainResponse(wireResponse);
 
 	send(wireRequest, requestSize);
-	receive(timeout, wireResponse, responseSize, true);
+	receive(timeout, wireResponse, responseSize);
 
 	uchar_t* payload = RPC::parseAndStripRPC(wireResponse, responseSize, xid);	
 
@@ -463,6 +460,14 @@ void Context::makeUmountCall(uint32_t timeout, const std::string& remote, uint32
 	uchar_t* payload = RPC::parseAndStripRPC(wireResponse, responseSize, xid);	
 
 	return;
+}
+
+int32_t Context::connectPortMapperPort(uint32_t timeout) {
+	if (port != portMapperPort) {
+		port = portMapperPort;
+		connect(portMapperPort);
+	}
+	return 0;
 }
 
 int32_t Context::connectMountPort(uint32_t timeout) {
