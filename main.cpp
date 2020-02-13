@@ -44,8 +44,7 @@ int main (int argc, char** argv)
 
 	Context_p context1 = sContexts.getContext(0);
 
-	PortMapperContext portMapper(GenericEnums::RPC_VERSION::RPC_VERSION2, GenericEnums::PROGRAM_VERSION::PROGRAM_VERSION2, GenericEnums::AUTH_TYPE::AUTH_SYS);
-	portMapper.setContext(context1);
+	PortMapperContext portMapper(context1, GenericEnums::RPC_VERSION::RPC_VERSION2, GenericEnums::PROGRAM_VERSION::PROGRAM_VERSION2, GenericEnums::AUTH_TYPE::AUTH_SYS);
 
 	auto mountPort = portMapper.getMountPort(RECV_TIMEOUT);
 	DEBUG_LOG(CRITICAL) << "Mount port : " << mountPort;
@@ -55,8 +54,7 @@ int main (int argc, char** argv)
 	context1->setMountPort(mountPort);
 	context1->setNfsPort(nfsPort);
 
-	MountContext mount;
-	mount.setContext(context1);
+	MountContext mount(context1);
 	std::string remote = "/default";
 	auto handle = mount.makeMountCall(5, remote, 3, GenericEnums::AUTH_TYPE::AUTH_SYS);
 

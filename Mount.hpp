@@ -18,7 +18,7 @@
 
 class MountContext {
 	public:
-		MountContext() : mountVersion(-1), authType(GenericEnums::AUTH_TYPE::None) {}
+		MountContext(Context_p& context) : context(context), mountVersion(-1), authType(GenericEnums::AUTH_TYPE::None) {}
 
 		void setMountPath(const std::string& remote) {
 			mountExport = remote;
@@ -52,7 +52,7 @@ class MountContext {
 		void setMountHandle(const handle& myHandle) {
 			mountHandle = myHandle;
 		}
-		std::shared_ptr<Context> context;
+		Context_p context;
 		handle mountHandle;
 		uint32_t mountVersion;
 		std::string mountExport;

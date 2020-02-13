@@ -33,8 +33,8 @@ class PortMapperContext {
 			IPPROTO_UDP = 17
 		);
 
-		PortMapperContext(GenericEnums::RPC_VERSION rpcVersion, GenericEnums::PROGRAM_VERSION programVersion, GenericEnums::AUTH_TYPE authType)
-  	  : rpcVersion(rpcVersion), programVersion(programVersion), authType(authType) {}
+		PortMapperContext(Context_p& context, GenericEnums::RPC_VERSION rpcVersion, GenericEnums::PROGRAM_VERSION programVersion, GenericEnums::AUTH_TYPE authType)
+  	  : context(context), rpcVersion(rpcVersion), programVersion(programVersion), authType(authType) {}
 
 			void setRPCVersion(GenericEnums::RPC_VERSION version) {
 				rpcVersion = version;
@@ -64,7 +64,7 @@ class PortMapperContext {
 		void setProgramVersion(GenericEnums::PROGRAM_VERSION version) {
 			programVersion = version;
 		}
-		std::shared_ptr<Context> context;
+		Context_p context;
 		GenericEnums::RPC_VERSION rpcVersion;
 		GenericEnums::PROGRAM_VERSION programVersion;
 		GenericEnums::AUTH_TYPE authType;
