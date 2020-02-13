@@ -74,7 +74,6 @@ const handle& MountContext::makeMountCall(uint32_t timeout, const std::string& r
 	}
 
 	xdr_decode_nBytes(payload, getMountHandle(), 64, payloadOffset);
-	context->addMountHandle(remote, getMountHandle());
 	uint32_t numberAuths = xdr_decode_u32(payload, payloadOffset);
 	DEBUG_LOG(CRITICAL) << "Servers supports " << numberAuths << " Auth types.";
 	for (uint32_t i = 0; i < numberAuths; ++i) {

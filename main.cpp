@@ -29,6 +29,7 @@
 #include "PortMapperContext.hpp"
 #include "GenericEnums.hpp"
 #include "Mount.hpp"
+#include "FSTree.hpp"
 #include "rpc.hpp"
 #include <iomanip>
 
@@ -55,8 +56,10 @@ int main (int argc, char** argv)
 	context1->setNfsPort(nfsPort);
 
 	MountContext mount(context1);
+	FSTree fsTree;
 	std::string remote = "/default";
 	auto handle = mount.makeMountCall(5, remote, 3, GenericEnums::AUTH_TYPE::AUTH_SYS);
+	fsTree.addMountHandle(remote, handle);
 
 	std::ostringstream oss;
 	for (uint32_t i = 0; i < handle.size(); ++i) {
@@ -64,7 +67,7 @@ int main (int argc, char** argv)
 	}
 	DEBUG_LOG(CRITICAL) << "Handle received : " << oss.str();
 
-	auto root = context1->getRoot();
+	auto root = fsTree.getRoot();
 
 	Context::Inode::lookup(context1, RECV_TIMEOUT, ".", root, GenericEnums::AUTH_TYPE::AUTH_SYS);
 

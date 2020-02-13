@@ -11,7 +11,7 @@ set(CMAKE_BUILD_TYPE Debug)
 
 project (nfsclisim)
 
-add_executable(nfsclisim descriptiveenum/DescriptiveEnum.cpp logging/Logging.cpp Context.cpp main.cpp Utils.cpp xdr.cpp PortMapperContext.cpp Mount.cpp)
+add_executable(nfsclisim descriptiveenum/DescriptiveEnum.cpp logging/Logging.cpp Context.cpp main.cpp Utils.cpp xdr.cpp PortMapperContext.cpp Mount.cpp FSTree.cpp)
 target_compile_features(nfsclisim PUBLIC cxx_std_11)
 
 target_link_libraries(nfsclisim pthread)

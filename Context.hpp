@@ -38,10 +38,6 @@ class Context : public std::enable_shared_from_this<Context> {
 		int32_t connectNfsPort(uint32_t timeout);
 		int32_t connectMountPort(uint32_t timeout);
 
-		const handle& getMountHandle(uint32_t i) {
-			return mountHandles.at(i);
-		}
-
 		DESC_CLASS_ENUM(NFSPROG, uint32_t,
 			NFSPROC3_NULL = 0,
 			NFSPROC3_GETATTR = 1,
@@ -236,25 +232,6 @@ class Context : public std::enable_shared_from_this<Context> {
 			nfsPort = port;
 		}
 
-		Inode_p getRoot() const {
-			std::lock_guard<std::mutex> lock(mutex);
-			auto iter = tree.find("");
-			return std::get<1>(*iter);
-		}
-
-		void addMountHandle(const std::string& remote, const handle& myHandle) {
-			std::lock_guard<std::mutex> lock(mutex);
-			mountHandles.push_back(myHandle);
-			auto iter = tree.find(remote);
-			if (iter != tree.end()) {
-				return;
-			}
-			iName_p parent = std::make_shared<iName>(remote);	
-			Inode_p inode = std::make_shared<Inode>(parent, "/", Inode::INODE_TYPE::NFS3DIR);
-			tree.insert({*parent, inode});
-			return;
-		}
-
 	private:
 		std::string server;
 		int32_t	port;
@@ -270,11 +247,8 @@ class Context : public std::enable_shared_from_this<Context> {
 		time_t disconnectTime;
 		struct tm *timem;
 		mutable std::mutex mutex;
-//		MountContext mountContext;
-		std::vector<handle> mountHandles;
 		int32_t mountPort;
 		int32_t nfsPort;
-		std::map<iName, Inode_p> tree; // Root entries of the tree have iName same as export of remote
 };
 
 using Context_p = std::shared_ptr<Context>;
