@@ -1,5 +1,6 @@
 #include "Context.hpp"
 #include "xdr.hpp"
+#include "PortMapperContext.hpp"
 
 #pragma once
 
@@ -9,7 +10,7 @@ class RPC {
 
 		constexpr static uint32_t HOSTNAME_LEN = 256;
 
-		static uint32_t makeRPC(uint32_t xid, Context::RPCTYPE rpcType, Context::RPC_VERSION rpcVersion, Context::RPC_PROGRAM rpcProgram, Context::PROGRAM_VERSION programVersion, uchar_t* wireBytes) {
+		static uint32_t makeRPC(uint32_t xid, GenericEnums::RPCTYPE rpcType, GenericEnums::RPC_VERSION rpcVersion, GenericEnums::RPC_PROGRAM rpcProgram, GenericEnums::PROGRAM_VERSION programVersion, uchar_t* wireBytes) {
 			uint32_t size = 0;
 
 			xdr_encode_u32(&wireBytes[size], 0); // Total message size. Set it to zero for now.
@@ -30,7 +31,7 @@ class RPC {
 		static uint32_t addAuthSys(uchar_t* wireBytes) {
 			uint32_t authSize = 0;
 
-			authSize += xdr_encode_u32(&wireBytes[authSize], static_cast<uint32_t>(Context::AUTH_TYPE::AUTH_SYS));
+			authSize += xdr_encode_u32(&wireBytes[authSize], static_cast<uint32_t>(GenericEnums::AUTH_TYPE::AUTH_SYS));
 
 			auto credPayloadSizeOffset = authSize;
 			authSize += xdr_encode_u32(&wireBytes[authSize], 0); // Number of bytes in the credential. Recomputed and rencoded later
@@ -54,7 +55,7 @@ class RPC {
 
 			xdr_encode_u32(&wireBytes[credPayloadSizeOffset], authSize-credPayloadBegin); // Recompute auth_struct size
 
-			authSize += xdr_encode_u32(&wireBytes[authSize], static_cast<uint32_t>(Context::AUTH_TYPE::AUTH_NONE)); // No verifire AUTH_NONE
+			authSize += xdr_encode_u32(&wireBytes[authSize], static_cast<uint32_t>(GenericEnums::AUTH_TYPE::AUTH_NONE)); // No verifire AUTH_NONE
 
 			authSize += xdr_encode_u32(&wireBytes[authSize], 0); // opague data length of zero for AUTH_NONE
 
@@ -70,9 +71,9 @@ class RPC {
 				return nullptr;
 			}
 
-			Context::RPCTYPE rpcType;
-			if ((rpcType = static_cast<Context::RPCTYPE>(xdr_decode_u32(wireResponse, parsedOffset))) != Context::RPCTYPE::REPLY) {
-				DEBUG_LOG(CRITICAL) << "Received wrong RPC message type :" << Context::RPCTYPEImage::printEnum(rpcType);
+			GenericEnums::RPCTYPE rpcType;
+			if ((rpcType = static_cast<GenericEnums::RPCTYPE>(xdr_decode_u32(wireResponse, parsedOffset))) != GenericEnums::RPCTYPE::REPLY) {
+				DEBUG_LOG(CRITICAL) << "Received wrong RPC message type :" << GenericEnums::RPCTYPEImage::printEnum(rpcType);
 			}
 
 			RPC_REPLY replyType;

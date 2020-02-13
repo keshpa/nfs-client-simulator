@@ -61,3 +61,5 @@ class ScopedMemoryHandler {
 static const std::string getLocalHostname();
 
 const std::string& getSelfFQDN();
+
+void printHandle(const std::string& comment, const handle& myHandle);

@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <iomanip>
 
 int parseArgs(int argc, char** argv, ServerContexts& sContexts) {
 	int opt;
@@ -112,4 +113,13 @@ static const std::string getLocalHostname() {
 const std::string& getSelfFQDN() {
 	static std::string selfName = getLocalHostname();
 	return selfName;
+}
+
+void printHandle(const std::string& comment, const handle& myHandle) {
+	DEBUG_LOG(CRITICAL) << comment;
+	std::ostringstream oss;
+	for (uint32_t i = 0; i < myHandle.size(); ++i) {
+		oss << std::setfill('0') << std::setw(2) << std::hex << (uint32_t)myHandle.at(i) << " ";
+	}
+	DEBUG_LOG(CRITICAL) << oss.str();
 }

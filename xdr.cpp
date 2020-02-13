@@ -42,6 +42,9 @@ int32_t xdr_encode_string(uchar_t* dst, const std::string& str) {
 	return strLen+4;
 }
 
+int32_t xdr_encode_handlestring(uchar_t* dst, const handle& myHandle) {
+}
+
 uint32_t xdr_encode_align(uchar_t* dst, uint32_t currentSize, uint32_t alignSize) {
 	uint32_t padding = 0;
 	if ((padding = (currentSize % alignSize)) == 0) {
@@ -57,6 +60,15 @@ uint32_t xdr_encode_align(uchar_t* dst, uint32_t currentSize, uint32_t alignSize
 
 void xdr_encode_lastFragment(uchar_t* dst) {
 	*dst |= (1 << 7);
+}
+
+int32_t xdr_encode_nBytes(uchar_t* src, const std::vector<uchar_t>& bytes) {
+	uint32_t offset = xdr_encode_u32(src, bytes.size());
+	for (uint32_t i = 0; i < bytes.size(); ++i) {
+		src[offset+i] = bytes[i];
+	}
+	offset += bytes.size();
+	return offset;
 }
 
 void xdr_strip_lastFragment(uchar_t* dst) {
@@ -115,10 +127,11 @@ int32_t xdr_decode_string(uchar_t* src, std::string& str, uint32_t maxStrLength,
 
 int32_t xdr_decode_nBytes(uchar_t* src, std::vector<uchar_t>& bytes, uint32_t maxBytes, uint32_t& offset) {
 	auto byteLen = xdr_decode_u32(src, offset);
-	if (byteLen < maxBytes) {
+	if (byteLen <= maxBytes) {
 		for (uint32_t i = 0; i < byteLen; ++i) {
 			bytes.push_back(src[offset+i]);
 		}
+		offset += byteLen;
 		return byteLen;
 	} else {
 		DEBUG_LOG(CRITICAL) << "Bad byte stream length. Maximum expected : " << maxBytes << " but that in XDR header : " << byteLen;

@@ -26,6 +26,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "Context.hpp"
+#include "PortMapperContext.hpp"
+#include "GenericEnums.hpp"
 #include "rpc.hpp"
 #include <iomanip>
 
@@ -41,9 +43,19 @@ int main (int argc, char** argv)
 
 	Context_p context1 = sContexts.getContext(0);
 
-//	context1->connect();
+	PortMapperContext portMapper(GenericEnums::RPC_VERSION::RPC_VERSION2, GenericEnums::PROGRAM_VERSION::PROGRAM_VERSION2, GenericEnums::AUTH_TYPE::AUTH_SYS);
+	portMapper.setContext(context1);
+
+	auto mountPort = portMapper.getMountPort(RECV_TIMEOUT);
+	DEBUG_LOG(CRITICAL) << "Mount port : " << mountPort;
+	auto nfsPort = portMapper.getNfsPort(RECV_TIMEOUT);
+	DEBUG_LOG(CRITICAL) << "NFS port : " << nfsPort;
+
+	context1->setMountPort(mountPort);
+	context1->setNfsPort(nfsPort);
+
 	std::string remote = "/default";
-	auto handle = context1->makeMountCall(5, remote, 3);
+	auto handle = context1->makeMountCall(5, remote, 3, GenericEnums::AUTH_TYPE::AUTH_SYS);
 
 	std::ostringstream oss;
 	for (uint32_t i = 0; i < handle.size(); ++i) {
@@ -51,9 +63,11 @@ int main (int argc, char** argv)
 	}
 	DEBUG_LOG(CRITICAL) << "Handle received : " << oss.str();
 
-	Context::Inode::lookup(context1, RECV_TIMEOUT, "/", handle);
+	auto root = context1->getRoot();
 
-	context1->makeUmountCall(5, remote, 3);
+	Context::Inode::lookup(context1, RECV_TIMEOUT, ".", root, GenericEnums::AUTH_TYPE::AUTH_SYS);
+
+	context1->makeUmountCall(5, remote, 3, GenericEnums::AUTH_TYPE::AUTH_SYS);
 
 	sContexts.putContext(0);
 

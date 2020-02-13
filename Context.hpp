@@ -1,8 +1,9 @@
+#pragma once
+
 #include "logging/Logging.hpp"
 #include "descriptiveenum/DescriptiveEnum.hpp"
 #include "types.hpp"
-
-#pragma once
+#include "GenericEnums.hpp"
 
 #include <assert.h>
 #include <vector>
@@ -23,18 +24,7 @@ using iName_p = std::shared_ptr<std::string>;
 
 class Context : public std::enable_shared_from_this<Context> {
 	public:
-		DESC_CLASS_ENUM(NFSOPERATION, size_t,
-			None = 0,
-			GetPort,
-			Mount,
-			UMOUNT,
-			READ,
-			WRITE,
-			SHARE,
-			UNSHARE,
-			UNKNOWN
-		);
-		Context(std::string& server, int32_t port) : server(server), portMapperPort(port), port(-1), error(0), returnValue(0), returnString(nullptr), operationType(NFSOPERATION::None), socketFd(-1), totalSent(0UL), totalReceived(0UL), mountPort(-1), nfsPort(-1) {}
+		Context(std::string& server, int32_t mapperPort) : server(server), portMapperPort(mapperPort), port(-1), error(0), returnValue(0), returnString(nullptr), socketFd(-1), totalSent(0UL), totalReceived(0UL), mountPort(-1), nfsPort(-1) {}
 
 		int32_t connect();
 		int32_t connect(int32_t port);
@@ -44,109 +34,10 @@ class Context : public std::enable_shared_from_this<Context> {
 		void printStatus();
 		uint32_t getPort(int32_t rcvTimeo, uint32_t program, uint32_t version);
 
-		void setOperation(NFSOPERATION operation);
-		NFSOPERATION getOperation();
-
-		DESC_CLASS_ENUM(PORTMAPPER, uint64_t,
-			// Version 2
-			PMAPPROC_NULL = 0,
-			PMAPPROC_SET = 1,
-			PMAPPROC_UNSET = 2,
-			PMAPPROC_GETPORT = 3,
-			PMAPPROC_DUMP = 4,
-			PMAPPROC_CALLIT = 5
-		);
-
-		DESC_CLASS_ENUM(RPCTYPE, uint32_t,
-			None = -1,
-			CALL = 0,
-			REPLY = 1,
-			UNKNOWN
-		);
-
-		DESC_CLASS_ENUM(RPC_VERSION, uint32_t,
-			None = -1,
-			RPC_VERSION1 = 1,
-			RPC_VERSION2 = 2,
-			UNKNOWN = 255
-		);
-
-		DESC_CLASS_ENUM(PROGRAM_VERSION, uint32_t,
-			None = -1,
-			PROGRAM_VERSION2 = 2,
-			PROGRAM_VERSION3 = 3
-		);
-
-		DESC_CLASS_ENUM(RPC_PROGRAM, uint32_t,
-			PORTMAP = 100000,
-			NFS = 100003,
-			MOUNT = 100005,
-			NLM = 100021,
-		);
-
-		DESC_CLASS_ENUM(AUTH_TYPE, uint32_t,
-			None = -1,
-			AUTH_INVALID = -1,
-			AUTH_NONE = 0,
-			AUTH_SYS = 1,
-			AUTH_SHORT = 2, //Not implemented
-			AUTH_DH = 3, //Not implemented
-			RPCSEC_GSS = 6, //Not implemented
-			UNKNOWN
-		);
-
 		DESC_CLASS_ENUM(MOUNT_VER, uint32_t,
 			None = -1,
 			VERSION3 = 3
 		);
-
-		DESC_CLASS_ENUM(PROTOCOL_TYPE, uint32_t,
-			IPPROTO_TCP = 6,
-			IPPROTO_UDP = 17,
-		);
-
-		class PortMapperContext {
-			public:
-				PortMapperContext()
-		  	  : rpcVersion(RPC_VERSION::None), programVersion(PROGRAM_VERSION::None), authType(AUTH_TYPE::AUTH_INVALID) {};
-
-				void setRPCVersion(RPC_VERSION version) {
-					rpcVersion = version;
-				}
-				RPC_VERSION getRPCVersion() const {
-					return rpcVersion;
-				}
-				PROGRAM_VERSION getProgramVersion() const {
-					return programVersion;
-				}
-
-				void setAuthType(AUTH_TYPE auth) {
-					authType = auth;
-				}
-				AUTH_TYPE getAuthType() const {
-					return authType;
-				}
-
-				friend class Context;
-			private:
-				void setProgramVersion(PROGRAM_VERSION version) {
-					programVersion = version;
-				}
-				void setContext(const std::shared_ptr<Context>& myContext) {
-					context = myContext;
-				}
-				std::shared_ptr<Context> context;
-				RPC_VERSION rpcVersion;
-				PROGRAM_VERSION programVersion;
-				AUTH_TYPE authType;
-		};
-
-		int32_t getMountPort(uint32_t rcvTimeo);
-		int32_t getNfsPort(uint32_t rcvTimeo);
-
-		PortMapperContext& getPortMapperContext() {
-			return portMapperDetails;
-		}
 
 		int32_t connectPortMapperPort(uint32_t timeout);
 		int32_t connectNfsPort(uint32_t timeout);
@@ -158,7 +49,7 @@ class Context : public std::enable_shared_from_this<Context> {
 			MOUNTPROC3_DUMP = 2,
 			MOUNTPROC3_UMNT = 3,
 			MOUNTPROC3_UMNTALL = 4,
-			MOUNTPROC3_EXPORT = 5,
+			MOUNTPROC3_EXPORT = 5
 		);
 
 		DESC_CLASS_ENUM(MOUNTREPLY, uint32_t,
@@ -171,13 +62,13 @@ class Context : public std::enable_shared_from_this<Context> {
 			MNT3ERR_INVAL = 22,             /* Invalid argument */
 			MNT3ERR_NAMETOOLONG = 63,       /* Filename too long */
 			MNT3ERR_NOTSUPP = 10004,        /* Operation not supported */
-			MNT3ERR_SERVERFAULT = 10006,    /* A failure on the server */
+			MNT3ERR_SERVERFAULT = 10006    /* A failure on the server */
 		);
 
 
 		class MountContext {
 			public:
-				MountContext() : mountVersion(-1), authType(AUTH_TYPE::None) {}
+				MountContext() : mountVersion(-1), authType(GenericEnums::AUTH_TYPE::None) {}
 
 				void setMountPath(const std::string& remote) {
 					mountExport = remote;
@@ -212,10 +103,10 @@ class Context : public std::enable_shared_from_this<Context> {
 				handle mountHandle;
 				uint32_t mountVersion;
 				std::string mountExport;
-				AUTH_TYPE authType;
+				GenericEnums::AUTH_TYPE authType;
 		};
 
-		const handle& makeMountCall(uint32_t timeout, const std::string& remote, uint32_t mountVersion);
+		const handle& makeMountCall(uint32_t timeout, const std::string& remote, uint32_t mountVersion, GenericEnums::AUTH_TYPE);
 		MountContext& getMountContext() {
 			return mountContext;
 		}
@@ -224,33 +115,93 @@ class Context : public std::enable_shared_from_this<Context> {
 			return mountHandles.at(i);
 		}
 
-		void makeUmountCall(uint32_t timeout, const std::string& remote, uint32_t mountVersion);
+		void makeUmountCall(uint32_t timeout, const std::string& remote, uint32_t mountVersion, GenericEnums::AUTH_TYPE);
+
+		DESC_CLASS_ENUM(NFSPROG, uint32_t,
+			NFSPROC3_NULL = 0,
+			NFSPROC3_GETATTR = 1,
+			NFSPROC3_SETATTR = 2,
+			NFSPROC3_LOOKUP = 3,
+			NFSPROC3_ACCESS = 4,
+			NFSPROC3_READLINK = 5,
+			NFSPROC3_READ = 6,
+			NFSPROC3_WRITE = 7,
+			NFSPROC3_CREATE = 8,
+			NFSPROC3_MKDIR = 9,
+			NFSPROC3_SYMLINK = 10,
+			NFSPROC3_MKNOD = 11,
+			NFSPROC3_REMOVE = 12,
+			NFSPROC3_RMDIR = 13,
+			NFSPROC3_RENAME = 14,
+			NFSPROC3_LINK = 15,
+			NFSPROC3_READDIR = 16,
+			NFSPROC3_READDIRPLUS = 17,
+			NFSPROC3_FSSTAT = 18,
+			NFSPROC3_FSINFO = 19,
+			NFSPROC3_PATHCONF = 20,
+			NFSPROC3_COMMIT = 21
+		);
+
+		DESC_CLASS_ENUM(NFSPROGERR, uint32_t,
+			NFS3_OK = 0,
+			NFS3ERR_PERM = 1,
+			NFS3ERR_NOENT = 2,
+			NFS3ERR_IO = 5,
+			NFS3ERR_NXIO = 6,
+			NFS3ERR_ACCES = 13,
+			NFS3ERR_EXIST = 17,
+			NFS3ERR_XDEV = 18,
+			NFS3ERR_NODEV = 19,
+			NFS3ERR_NOTDIR = 20,
+			NFS3ERR_ISDIR = 21,
+			NFS3ERR_INVAL = 22,
+			NFS3ERR_FBIG = 27,
+			NFS3ERR_NOSPC = 28,
+			NFS3ERR_ROFS = 30,
+			NFS3ERR_MLINK = 31,
+			NFS3ERR_NAMETOOLONG = 63,
+			NFS3ERR_NOTEMPTY = 66,
+			NFS3ERR_DQUOT = 69,
+			NFS3ERR_STALE = 70,
+			NFS3ERR_REMOTE = 71,
+			NFS3ERR_BADHANDLE = 10001,
+			NFS3ERR_NOT_SYNC = 10002,
+			NFS3ERR_BAD_COOKIE = 10003,
+			NFS3ERR_NOTSUPP = 10004,
+			NFS3ERR_TOOSMALL = 10005,
+			NFS3ERR_SERVERFAULT = 10006,
+			NFS3ERR_BADTYPE = 10007,
+			NFS3ERR_JUKEBOX = 10008
+		);
 
 		class Permissions {
 			public:
 				DESC_CLASS_ENUM(PERMS, uint32_t,
-					None = 0,
-					OTHER_R = 0x0400,
-					OTHER_W = 0x0200,
-					OTHER_X = 0x0100,
-					GROUP_R = 0x040,
-					GROUP_W = 0x020,
-					GROUP_X = 0x010,
-					SELF_R = 0x04,
-					SELF_W = 0x02,
-					SELF_X = 0x01,
+					XOTH = (1u << 0),
+					WOTH = (1u << 1),
+					ROTH = (1u << 2),
+					XGRP = (1u << 3),
+					WGRP = (1u << 4),
+					RGRP = (1u << 5),
+					XUSR = (1u << 6),
+					WUSR = (1u << 7),
+					RUSR = (1u << 8),
+					STXT = (1u << 9),
+					SGRP = (1u << 10),
+					SUSR = (1u << 11)
 				);
 
+
 				static uint32_t makeDefault() {
-					uint32_t mode = static_cast<uint32_t>(PERMS::OTHER_R);
-					mode |= static_cast<uint32_t>(PERMS::OTHER_W);
-					mode |= static_cast<uint32_t>(PERMS::OTHER_X);
-					mode |= static_cast<uint32_t>(PERMS::GROUP_R);
-					mode |= static_cast<uint32_t>(PERMS::GROUP_W);
-					mode |= static_cast<uint32_t>(PERMS::GROUP_X);
-					mode |= static_cast<uint32_t>(PERMS::SELF_R);
-					mode |= static_cast<uint32_t>(PERMS::SELF_W);
-					mode |= static_cast<uint32_t>(PERMS::SELF_X);
+					uint32_t mode = static_cast<uint32_t>(PERMS::XOTH);
+					mode |= static_cast<uint32_t>(PERMS::WOTH);
+					mode |= static_cast<uint32_t>(PERMS::ROTH);
+					mode |= static_cast<uint32_t>(PERMS::XGRP);
+					mode |= static_cast<uint32_t>(PERMS::WGRP);
+					mode |= static_cast<uint32_t>(PERMS::RGRP);
+					mode |= static_cast<uint32_t>(PERMS::XUSR);
+					mode |= static_cast<uint32_t>(PERMS::WUSR);
+					mode |= static_cast<uint32_t>(PERMS::RUSR);
 					return mode;
 				}
 
@@ -264,26 +215,44 @@ class Context : public std::enable_shared_from_this<Context> {
 		class Inode {
 			public:
 				DESC_CLASS_ENUM(INODE_TYPE, uint32_t,
-					None = -1,
-					Regular = 1,
-					Directory,
-					Special,
-					Unknown = 255
+					NFS3REG = 1,
+					NFS3DIR = 2,
+					NFS3BLK = 3,
+					NFS3CHR = 4,
+					NFS3LNK = 5,
+					NFS3SOCK = 6,
+					NFS3FIFO = 7
 				);
+
 				Inode(iName_p& parent, const iName& name, INODE_TYPE type) : self(name), type(type) {
 					std::string myName = name;
 					stripSlash(myName);
-					if (type == INODE_TYPE::Directory) {
+					if (type == INODE_TYPE::NFS3DIR) {
 						std::string self = *parent + "/" + myName;
 						selfDir = std::make_shared<std::string>(self);
-					} else if (type == INODE_TYPE::Regular || type == INODE_TYPE::Special) {
+					} else if (type == INODE_TYPE::NFS3REG || inodeSpecial(type) || inodeLink(type)) {
 						self = myName;
 					}
+					DEBUG_LOG(CRITICAL) << "Enterned into tree : <" << *parent << ":" << myName << ">";
 					parentName = parent;
 				}
 
+				static bool inodeSpecial(INODE_TYPE type) {
+					if (type == INODE_TYPE::NFS3BLK ||
+						type == INODE_TYPE::NFS3CHR ||
+						type == INODE_TYPE::NFS3SOCK ||
+						type == INODE_TYPE::NFS3FIFO) {
+						return true;
+					}
+					return false;
+				}
+
+				static bool inodeLink(INODE_TYPE type) {
+					return (type == INODE_TYPE::NFS3LNK) ? true : false;
+				}
+
 				static int32_t move(const std::shared_ptr<Context>& context, const iName_p& oldHandle, const iName_p& newHandle);
-				static const handle& lookup(std::shared_ptr<Context>& context, uint32_t timeout, const iName& child, const handle& parent);
+				static const handle_p lookup(std::shared_ptr<Context>& context, uint32_t timeout, const iName& child, const std::shared_ptr<Inode>& parent, GenericEnums::AUTH_TYPE authType);
 				static const handle& makeMkdir(const std::shared_ptr<Context>& context, uint32_t timeout, const iName_p& parent, const iName& dirName);
 				static const handle& makeFile(const std::shared_ptr<Context>& context, uint32_t timeout, const iName_p& parent, const iName& fileName);
 				static const void unlinkDir(const std::shared_ptr<Context>& context, uint32_t timeout, const iName_p& parent, const iName& dirName);
@@ -300,7 +269,23 @@ class Context : public std::enable_shared_from_this<Context> {
 
 				static void stripSlash(iName& name) {
 					static std::string slash = "/";
-					size_t found = name.rfind(slash);
+					static std::string dotSlash = "./";
+					static std::string dotdot = "..";
+
+					size_t found = name.rfind(dotdot);
+					if (found != std::string::npos) {
+						name = "";
+						DEBUG_LOG(CRITICAL) << "Encountered [..] in filename." << name;
+						return;
+					}
+
+					found = name.rfind(dotSlash);
+					while (found != std::string::npos) {
+						name.replace(found, dotSlash.length(), "");
+						found = name.rfind(dotSlash);
+					}
+
+					found = name.rfind(slash);
 					while (found != std::string::npos) {
 						name.replace(found, slash.length(), "");
 						found = name.rfind(slash);
@@ -318,12 +303,18 @@ class Context : public std::enable_shared_from_this<Context> {
 		};
 		using Inode_p = std::shared_ptr<Inode>;
 
-		int32_t getMountPortLocal() const {
-			return mountPort;
+		void setMountPort(uint32_t port) {
+			mountPort = port;
 		}
 
-		int32_t getNfsPortLocal() const {
-			return nfsPort;
+		void setNfsPort(uint32_t port) {
+			nfsPort = port;
+		}
+
+		Inode_p getRoot() const {
+			std::lock_guard<std::mutex> lock(mutex);
+			auto iter = tree.find("");
+			return std::get<1>(*iter);
 		}
 
 	private:
@@ -335,7 +326,7 @@ class Context : public std::enable_shared_from_this<Context> {
 				return;
 			}
 			iName_p parent = std::make_shared<iName>(remote);	
-			Inode_p inode = std::make_shared<Inode>(parent, "/", Inode::INODE_TYPE::Directory);
+			Inode_p inode = std::make_shared<Inode>(parent, "/", Inode::INODE_TYPE::NFS3DIR);
 			tree.insert({*parent, inode});
 			return;
 		}
@@ -353,9 +344,7 @@ class Context : public std::enable_shared_from_this<Context> {
 		time_t connectTime;
 		time_t disconnectTime;
 		struct tm *timem;
-		NFSOPERATION operationType;
-		std::mutex mutex;
-		PortMapperContext portMapperDetails;
+		mutable std::mutex mutex;
 		MountContext mountContext;
 		std::vector<handle> mountHandles;
 		int32_t mountPort;
