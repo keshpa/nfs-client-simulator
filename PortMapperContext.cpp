@@ -81,9 +81,9 @@ uint32_t PortMapperContext::getPort(int32_t rcvTimeo, uint32_t program, uint32_t
 }
 
 int32_t PortMapperContext::getMountPort(uint32_t rcvTimeo) {
-	return getPort(rcvTimeo, static_cast<uint32_t>(GenericEnums::RPC_PROGRAM::MOUNT), static_cast<uint32_t>(Context::MOUNT_VER::VERSION3));
+	return getPort(rcvTimeo, static_cast<uint32_t>(GenericEnums::RPC_PROGRAM::MOUNT), static_cast<uint32_t>(GenericEnums::MOUNT_VER::VERSION3));
 }
 
 int32_t PortMapperContext::getNfsPort(uint32_t rcvTimeo) {
-	return getPort(rcvTimeo, static_cast<uint32_t>(GenericEnums::RPC_PROGRAM::NFS), static_cast<uint32_t>(Context::MOUNT_VER::VERSION3));
+	return getPort(rcvTimeo, static_cast<uint32_t>(GenericEnums::RPC_PROGRAM::NFS), static_cast<uint32_t>(GenericEnums::MOUNT_VER::VERSION3));
 }

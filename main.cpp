@@ -28,6 +28,7 @@
 #include "Context.hpp"
 #include "PortMapperContext.hpp"
 #include "GenericEnums.hpp"
+#include "Mount.hpp"
 #include "rpc.hpp"
 #include <iomanip>
 
@@ -54,8 +55,10 @@ int main (int argc, char** argv)
 	context1->setMountPort(mountPort);
 	context1->setNfsPort(nfsPort);
 
+	MountContext mount;
+	mount.setContext(context1);
 	std::string remote = "/default";
-	auto handle = context1->makeMountCall(5, remote, 3, GenericEnums::AUTH_TYPE::AUTH_SYS);
+	auto handle = mount.makeMountCall(5, remote, 3, GenericEnums::AUTH_TYPE::AUTH_SYS);
 
 	std::ostringstream oss;
 	for (uint32_t i = 0; i < handle.size(); ++i) {
@@ -67,7 +70,7 @@ int main (int argc, char** argv)
 
 	Context::Inode::lookup(context1, RECV_TIMEOUT, ".", root, GenericEnums::AUTH_TYPE::AUTH_SYS);
 
-	context1->makeUmountCall(5, remote, 3, GenericEnums::AUTH_TYPE::AUTH_SYS);
+	mount.makeUmountCall(5, remote, 3, GenericEnums::AUTH_TYPE::AUTH_SYS);
 
 	sContexts.putContext(0);
 
